@@ -28,6 +28,9 @@ module Fastlane
           request_data['langs'] = languages.to_json
         end
 
+        request_data.merge!(params[:opts]) unless params[:opts].nil? || !params[:opts].kind_of?(Hash)
+        UI.message "Exporting localizations with parameters #{request_data} 📦"
+
         tags = params[:tags]
         if tags.kind_of? Array then
           request_data["include_tags"] = tags.to_json
@@ -41,14 +44,13 @@ module Fastlane
         http.use_ssl = true
         response = http.request(request)
 
-
-        jsonResponse = JSON.parse(response.body)
-        UI.error "Bad response 🉐\n#{response.body}" unless jsonResponse.kind_of? Hash
-        if jsonResponse["response"]["status"] == "success" && jsonResponse["bundle"]["file"].kind_of?(String)  then
-          UI.message "Downloading localizations archive 📦"
-          FileUtils.mkdir_p("lokalisetmp")
-          fileURL = jsonResponse["bundle"]["full_file"]
-          uri = URI(fileURL)
+        json_response = JSON.parse(response.body)
+        UI.error "Bad response 🉐\n#{response.body}" unless json_response.kind_of? Hash
+        if json_response['response']['status'] == 'success' && json_response['bundle']['file'].kind_of?(String)
+          UI.message 'Downloading localizations archive 📦'
+          FileUtils.mkdir_p('lokalisetmp')
+          file_path = json_response['bundle']['file']
+          uri = URI("https://s3-eu-west-1.amazonaws.com/lokalise-assets/#{file_path}")
           http = Net::HTTP.new(uri.host, uri.port)
           http.use_ssl = true
 
@@ -62,6 +64,8 @@ module Fastlane
             unzip_file('lokalisetmp/a.zip', destination, clean_destination)
             FileUtils.remove_dir('lokalisetmp')
             UI.success "Localizations extracted to #{destination} 📗 📕 📘"
+
+            destination
           else
             UI.error 'Response did not include ZIP'
           end
@@ -169,6 +173,14 @@ module Fastlane
                              UI.user_error! "Tags should be passed as array" unless value.kind_of? Array
                              end),
 
+          FastlaneCore::ConfigItem.new(key: :opts,
+                                       description: 'Additional parameters',
+                                       optional: true,
+                                       is_string: false,
+                                       default_value: false,
+                                       verify_block: proc do |value|
+                                         UI.user_error! 'Additional parameters has to be Hash' if value && !value.kind_of?(Hash)
+                                       end)
         ]
       end
 
